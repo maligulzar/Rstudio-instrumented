@@ -101,12 +101,56 @@ public class PlotsPane extends WorkbenchPane implements Plots.Display,
    {
       frame_.setImageUrl(null);
    }
+   
+   /*
+    * Code by [Gulzar]
+    * 
+    * */
 
+	public void doall(String text, String ser, String type, String time) {
+		com.google.gwt.json.client.JSONObject jo = new com.google.gwt.json.client.JSONObject();	
+		jo.put("Text", new com.google.gwt.json.client.JSONString(text));
+		jo.put("ser", new com.google.gwt.json.client.JSONString(ser + ""));
+		jo.put("type", new com.google.gwt.json.client.JSONString(type + ""));
+
+		jo.put("time", new com.google.gwt.json.client.JSONString(time + ""));
+		String host_base = com.google.gwt.core.client.GWT.getHostPageBaseURL();
+		String[] a = host_base.split(":");
+		host_base = a[0]+":"+a[1]+":8000/";
+		String url = host_base+ "?q=ABC&data="+jo.toString();
+		url = com.google.gwt.http.client.URL.encode(url);
+		com.google.gwt.jsonp.client.JsonpRequestBuilder builder = new com.google.gwt.jsonp.client.JsonpRequestBuilder();
+		builder.send(url);
+	}
+	
+
+	   /*
+	    * Ends Here [Gulzar]
+	    * 
+	    * */
+	
+	
    public void showPlot(String plotUrl)
    {
       // save plot url for refresh
       plotUrl_ = plotUrl;
 
+      
+
+      /*
+       * Code by [Gulzar]
+       * 
+       * */
+		doall(plotUrl_ , 1+"" ,3+ "" , 	((int) (new java.util.Date().getTime())) + "");
+		
+      
+
+		   /*
+		    * Ends Here [Gulzar]
+		    * 
+		    * */
+		
+		
       // use frame.contentWindow.location.replace to avoid having the plot
       // enter the browser's history
       frame_.setImageUrl(plotUrl);

