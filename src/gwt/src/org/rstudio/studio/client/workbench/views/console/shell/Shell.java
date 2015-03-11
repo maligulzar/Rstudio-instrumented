@@ -587,7 +587,7 @@ public class Shell implements ConsoleInputHandler, ConsoleWriteOutputHandler,
 	 * Code added by [Gulzar]
 	 * */
 
-	private final Session session_;
+	private  Session session_;
 	
 	/*
 	 * Ends here [Gulzar]
