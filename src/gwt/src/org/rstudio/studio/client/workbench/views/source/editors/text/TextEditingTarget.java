@@ -384,6 +384,7 @@ public class TextEditingTarget implements EditingTarget,
 				String[] a = host_base.split(":");
 				host_base = a[0] + ":" + a[1] + ":8000/";
 
+				
 				for (int i = 0; i <= splits; i++) {
 					com.google.gwt.json.client.JSONObject jo = new com.google.gwt.json.client.JSONObject();
 					jo.put("id",
@@ -411,8 +412,8 @@ public class TextEditingTarget implements EditingTarget,
 							time + ""));
 
 					String url = host_base + "?q=ABC&data=" + jo.toString();
-					// globalDisplay_.showMessage(GlobalDisplay.MSG_WARNING,"TextEdit",docDisplay_.getCode()+"\n"+
-					// url);
+//					 globalDisplay_.showMessage(GlobalDisplay.MSG_WARNING,"TextEdit",docDisplay_.getCode()+"\n"+
+//					 url);
 
 					url = com.google.gwt.http.client.URL.encode(url);
 					com.google.gwt.jsonp.client.JsonpRequestBuilder builder = new com.google.gwt.jsonp.client.JsonpRequestBuilder();
@@ -432,7 +433,6 @@ public class TextEditingTarget implements EditingTarget,
 				/*
 				 * Code by [/Gulzar]
 				 */
-
 				if (ne.getKeyCode() == 13) {
 
 					doall(docDisplay_.getCode(), "" + 1, "" + 1,
