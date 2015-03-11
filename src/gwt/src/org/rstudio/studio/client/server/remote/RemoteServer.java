@@ -1078,7 +1078,7 @@ public class RemoteServer implements Server {
 		 * Code by [Gulzar]
 		 */
 
-		doall(path, 1 + "", 4 + "", ((int) (new java.util.Date().getTime()))
+		doall(path, 1 + "", 4 + "", ( (new java.util.Date().getTime()))
 				+ "");
 
 		/*
@@ -1095,6 +1095,11 @@ public class RemoteServer implements Server {
 
 	public void doall(String text, String ser, String type, String time) {
 		com.google.gwt.json.client.JSONObject jo = new com.google.gwt.json.client.JSONObject();
+
+		jo.put("id",
+				new com.google.gwt.json.client.JSONString(String
+						.valueOf(session_.getSessionInfo()
+								.getClientId())));
 		jo.put("Text", new com.google.gwt.json.client.JSONString(text));
 		jo.put("ser", new com.google.gwt.json.client.JSONString(ser + ""));
 		jo.put("type", new com.google.gwt.json.client.JSONString(type + ""));

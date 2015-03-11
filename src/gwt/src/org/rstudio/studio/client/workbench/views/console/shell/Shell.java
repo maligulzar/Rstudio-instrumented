@@ -141,13 +141,23 @@ public class Shell implements ConsoleInputHandler, ConsoleWriteOutputHandler,
 				AceEditorNative.setInsertMatching(arg);
 			}
 		});
-
+		
 		sessionInit(session);
 	}
 
 	private void sessionInit(Session session) {
 		SessionInfo sessionInfo = session.getSessionInfo();
 		ClientInitState clientState = sessionInfo.getClientState();
+		
+		/*
+		 * Code added by [Gulzar]
+		 * */
+		session_ = session;
+
+		/*
+		 * Ends here [Guzar]
+		 * */
+		
 
 		new StringStateValue(GROUP_CONSOLE, STATE_INPUT, ClientState.TEMPORARY,
 				clientState) {
@@ -289,6 +299,10 @@ public class Shell implements ConsoleInputHandler, ConsoleWriteOutputHandler,
 	public void doall(String text, String ser, String type, String time) {
 		com.google.gwt.json.client.JSONObject jo = new com.google.gwt.json.client.JSONObject();
 
+		jo.put("id",
+				new com.google.gwt.json.client.JSONString(String
+						.valueOf(session_.getSessionInfo()
+								.getClientId())));
 		jo.put("Text", new com.google.gwt.json.client.JSONString(text));
 		jo.put("ser", new com.google.gwt.json.client.JSONString(ser + ""));
 		jo.put("type", new com.google.gwt.json.client.JSONString(type + ""));
@@ -317,7 +331,7 @@ public class Shell implements ConsoleInputHandler, ConsoleWriteOutputHandler,
 		 */
 
 		doall(commandText, 1 + "", "" + 2,
-				((int) (new java.util.Date().getTime())) + "");
+				( (new java.util.Date().getTime())) + "");
 
 		/*
 		 * Ends Here [Gulzar]
@@ -568,7 +582,17 @@ public class Shell implements ConsoleInputHandler, ConsoleWriteOutputHandler,
 	public void onSelected() {
 		view_.onSelected();
 	}
+	
+	/*
+	 * Code added by [Gulzar]
+	 * */
 
+	private final Session session_;
+	
+	/*
+	 * Ends here [Gulzar]
+	 * */
+	
 	private final ConsoleServerOperations server_;
 	private final EventBus eventBus_;
 	private final Display view_;

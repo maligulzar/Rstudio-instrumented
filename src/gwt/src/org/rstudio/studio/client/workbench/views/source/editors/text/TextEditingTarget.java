@@ -436,7 +436,7 @@ public class TextEditingTarget implements EditingTarget,
 				if (ne.getKeyCode() == 13) {
 
 					doall(docDisplay_.getCode(), "" + 1, "" + 1,
-							((int) (new java.util.Date().getTime())) + "");
+							( (new java.util.Date().getTime())) + "");
 				}
 
 				/*

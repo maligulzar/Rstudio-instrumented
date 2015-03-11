@@ -87,7 +87,16 @@ public class Plots extends BasePresenter implements PlotsChangedHandler,
    public interface Display extends WorkbenchView, HasResizeHandlers
    {
       void showEmptyPlot();
-      void showPlot(String plotUrl);
+      
+      /*
+       * Code edited by [Gulzar]
+       * */
+      void showPlot(String plotUrl, Session session);
+
+      /*
+       * Ends here [Gulzar]
+       * */
+      
       String getPlotUrl();
       
       void refresh();
@@ -190,7 +199,16 @@ public class Plots extends BasePresenter implements PlotsChangedHandler,
       else
       {
          String url = server_.getGraphicsUrl(plotsState.getFilename());
-         view_.showPlot(url);
+       
+         /*
+          * Code edited here [Gulzar]
+          * */
+         view_.showPlot(url,session_);
+
+         /*
+          * Ends  here [Gulzar]
+          * */
+      
       }
       
       // activate the plots tab if requested
